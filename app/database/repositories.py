@@ -76,6 +76,22 @@ async def list_accounts(session: AsyncSession, owner_id: int) -> Sequence[Accoun
     return result.all()
 
 
+async def find_accounts_by_name(
+    session: AsyncSession, owner_id: int, query: str, limit: int = 10
+) -> Sequence[Account]:
+    """Adında `query` geçen hesaplar; en kısa (en yakın) eşleşmeler önce."""
+    result = await session.scalars(
+        select(Account)
+        .where(
+            Account.owner_id == owner_id,
+            func.lower(Account.name).contains(query.lower(), autoescape=True),
+        )
+        .order_by(func.length(Account.name), Account.id)
+        .limit(limit)
+    )
+    return result.all()
+
+
 async def count_accounts(session: AsyncSession, owner_id: int) -> int:
     return (
         await session.scalar(select(func.count(Account.id)).where(Account.owner_id == owner_id))

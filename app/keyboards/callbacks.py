@@ -5,6 +5,8 @@ from aiogram.filters.callback_data import CallbackData
 
 class MenuCB(CallbackData, prefix="m"):
     action: str  # accounts | add | info
+    page: int = 0
+    aid: int = 0  # verilirse liste bu hesabın bulunduğu sayfada açılır
 
 
 class AccountCB(CallbackData, prefix="a"):

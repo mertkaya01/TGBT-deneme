@@ -49,7 +49,7 @@ ClientFactory = Callable[..., TelegramClient]
 
 GROUPS_CACHE_TTL = 300
 MAINTENANCE_INTERVAL = 60
-STARTUP_CONCURRENCY = 5
+STARTUP_CONCURRENCY = 10  # açılışta aynı anda bağlanan hesap sayısı
 
 
 # =========================================================================== login tipleri

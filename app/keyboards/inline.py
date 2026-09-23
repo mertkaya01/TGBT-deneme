@@ -36,6 +36,7 @@ from app.userbots.runtime import GroupInfo
 from app.utils.text import shorten
 
 EXCEPTIONS_PAGE_SIZE = 8
+ACCOUNTS_PAGE_SIZE = 20
 
 
 def _single_column(builder: InlineKeyboardBuilder) -> InlineKeyboardMarkup:
@@ -56,16 +57,70 @@ def account_status_icon(account: Account, connected: bool) -> str:
 # --------------------------------------------------------------------------- ana menü
 
 
-def accounts_menu(accounts: Sequence[tuple[Account, bool]]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for account, connected in accounts:
-        builder.button(
-            text=f"{account_status_icon(account, connected)} {account.name}",
-            callback_data=AccountCB(action="open", aid=account.id),
+def page_count(total: int, page_size: int) -> int:
+    return max(1, -(-total // page_size))
+
+
+def _account_button(account: Account, connected: bool) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text=f"{account_status_icon(account, connected)} {account.name}",
+        callback_data=AccountCB(action="open", aid=account.id).pack(),
+    )
+
+
+def accounts_menu(accounts: Sequence[tuple[Account, bool]], page: int = 0) -> InlineKeyboardMarkup:
+    """Sayfalı hesap listesi (Telegram bir klavyede en fazla 100 buton kabul eder)."""
+    pages = page_count(len(accounts), ACCOUNTS_PAGE_SIZE)
+    page = min(max(page, 0), pages - 1)
+    start = page * ACCOUNTS_PAGE_SIZE
+    rows = [
+        [_account_button(account, connected)]
+        for account, connected in accounts[start : start + ACCOUNTS_PAGE_SIZE]
+    ]
+    if pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(
+                InlineKeyboardButton(
+                    text="◀️", callback_data=MenuCB(action="accounts", page=page - 1).pack()
+                )
+            )
+        nav.append(
+            InlineKeyboardButton(
+                text=f"{page + 1}/{pages}",
+                callback_data=MenuCB(action="accounts", page=page).pack(),
+            )
         )
-    builder.button(text=texts.BTN_ADD_ACCOUNT, callback_data=MenuCB(action="add"))
-    builder.button(text=texts.BTN_INFO, callback_data=MenuCB(action="info"))
-    return _single_column(builder)
+        if page < pages - 1:
+            nav.append(
+                InlineKeyboardButton(
+                    text="▶️", callback_data=MenuCB(action="accounts", page=page + 1).pack()
+                )
+            )
+        rows.append(nav)
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=texts.BTN_ADD_ACCOUNT, callback_data=MenuCB(action="add").pack()
+            )
+        ]
+    )
+    rows.append(
+        [InlineKeyboardButton(text=texts.BTN_INFO, callback_data=MenuCB(action="info").pack())]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def account_search_results(accounts: Sequence[tuple[Account, bool]]) -> InlineKeyboardMarkup:
+    rows = [[_account_button(account, connected)] for account, connected in accounts]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=texts.BTN_BACK_TO_LIST, callback_data=MenuCB(action="accounts").pack()
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def info_back() -> InlineKeyboardMarkup:
@@ -116,7 +171,7 @@ def account_panel(account: Account) -> InlineKeyboardMarkup:
     builder.button(text=texts.BTN_OTHER, callback_data=OtherCB(action="menu", aid=aid))
     builder.button(text=texts.BTN_HEALTH, callback_data=AccountCB(action="health", aid=aid))
     builder.button(text=texts.BTN_DELETE, callback_data=AccountCB(action="delete", aid=aid))
-    builder.button(text=texts.BTN_BACK_TO_LIST, callback_data=MenuCB(action="accounts"))
+    builder.button(text=texts.BTN_BACK_TO_LIST, callback_data=MenuCB(action="accounts", aid=aid))
     return _single_column(builder)
 
 

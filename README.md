@@ -66,7 +66,7 @@ app/
 │   └── errors.py            # Telethon hata sınıflandırması
 └── utils/                   # flood kapısı, Redis kilidi, şifreleme, entity & metin yardımcıları
 migrations/                  # Alembic
-tests/                       # 80 test (uçtan uca bot akışları dahil)
+tests/                       # 83 test (uçtan uca bot akışları dahil)
 ```
 
 ## Kurulum
@@ -149,6 +149,14 @@ python -m app                # SQLite + (REDIS_URL boşsa) bellek içi FSM
 
 İşlemleri her adımda `/cancel` ile iptal edebilirsiniz.
 
+### Hesap (slot) limiti
+Kullanıcı başına varsayılan limit **500 hesap**tır (`.env` → `MAX_ACCOUNTS_PER_USER`). Değeri değiştirdikten sonra
+`docker compose up -d` çalıştırın; `restart` `.env` değişikliklerini okumaz.
+- Hesap listesi 20'şerli **sayfalara** bölünür, başlıkta çalışan / kapalı / sorunlu hesap sayıları görünür.
+- Bir hesabı hızlıca açmak için adını bota yazmanız yeterli: tam eşleşme doğrudan paneli açar, kısmi eşleşmeler liste olarak gelir.
+- Paneldeki "🔙 Hesap Listesine Dön" butonu, hesabın bulunduğu sayfaya geri döner.
+- Kullanıcı başına saatte en fazla `LOGIN_ATTEMPTS_PER_HOUR` (varsayılan 60) giriş denemesi yapılabilir.
+
 ### Admin komutları
 | Komut | İşlev |
 |---|---|
@@ -189,7 +197,7 @@ Aynı hesap iki süreçte çalışmasın diye Redis kilidi (`SET NX PX` + heartb
 ## Geliştirme
 
 ```bash
-pytest                   # 80 test (SQLite)
+pytest                   # 83 test (SQLite)
 TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost/tgbt pytest   # PostgreSQL ile
 ruff check . && ruff format --check .
 alembic revision --autogenerate -m "açıklama"   # model değişikliğinden sonra
@@ -204,5 +212,8 @@ login'den panele, otomatik mesaj sihirbazından DM toplu gönderime kadar kullan
   yasaklanmasına yol açabilir. Sistem bunu algılar, gönderimi durdurur ve sizi bilgilendirir, ancak Telegram'ın kararını
   engelleyemez. Yeni açılmış hesaplarla ve reklama izin vermeyen gruplarda dikkatli olun. Çok kısa döngüler için panel uyarı verir.
 - **Özel emoji:** yalnızca Premium userbot hesaplarında görünür. Diğer hesaplarda standart emojiye düşer.
+- **Çok sayıda hesap:** Her bağlı hesap sürekli açık bir Telegram bağlantısı ve bellek kullanır. Yüzlerce hesap
+  için makinenin RAM'ini ve Docker Desktop'ın bellek sınırını (Settings → Resources) kontrol edin. Aynı sunucudan
+  çok sayıda hesabın otomatik mesaj göndermesi, Telegram'ın spam kısıtı uygulama olasılığını da artırır.
 - **Login yarıda kalırsa:** Bot yeniden başlarsa yarım kalan giriş işlemi sıfırlanır, `/start` ile baştan başlayın.
 - **Dışa aktarılan `.session` dosyası** hesaba tam erişim verir. Kimseyle paylaşmayın.

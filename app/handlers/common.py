@@ -59,17 +59,42 @@ async def edit_or_send(
 # --------------------------------------------------------------------------- hesap listesi
 
 
+def account_state(account: Account, connected: bool) -> str:
+    """Özet sayaçları için: running | stopped | problem."""
+    if account.status in (AccountStatus.AUTH_ERROR, AccountStatus.SPAM_LIMITED) or not connected:
+        return "problem"
+    return "running" if account.auto_message_enabled else "stopped"
+
+
 async def show_accounts(
     target: CallbackQuery | Message,
     session: AsyncSession,
     user: User,
     manager: UserbotManager,
     settings: Settings,
+    *,
+    page: int = 0,
+    focus_aid: int = 0,
 ) -> None:
     accounts = await repo.list_accounts(session, user.id)
     rows = [(a, manager.is_connected(a.id)) for a in accounts]
-    text = texts.ACCOUNTS_TITLE.format(count=len(accounts), limit=slot_limit(user, settings))
-    await edit_or_send(target, text, inline.accounts_menu(rows))
+    if focus_aid:  # panelden dönüşte hesabın bulunduğu sayfayı aç
+        index = next((i for i, (a, _) in enumerate(rows) if a.id == focus_aid), 0)
+        page = index // inline.ACCOUNTS_PAGE_SIZE
+    pages = inline.page_count(len(rows), inline.ACCOUNTS_PAGE_SIZE)
+    page = min(max(page, 0), pages - 1)
+
+    counts = {"running": 0, "stopped": 0, "problem": 0}
+    for account, connected in rows:
+        counts[account_state(account, connected)] += 1
+    text = texts.ACCOUNTS_TITLE.format(
+        count=len(rows),
+        limit=slot_limit(user, settings),
+        page_info=texts.ACCOUNTS_PAGE_INFO.format(page=page + 1, pages=pages) if pages > 1 else "",
+        search_hint=texts.ACCOUNTS_SEARCH_HINT if pages > 1 else "",
+        **counts,
+    )
+    await edit_or_send(target, text, inline.accounts_menu(rows, page))
 
 
 # --------------------------------------------------------------------------- hesap paneli

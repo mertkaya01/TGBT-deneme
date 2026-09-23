@@ -44,7 +44,8 @@ class UTCDateTime(TypeDecorator):
 def create_engine(database_url: str) -> AsyncEngine:
     url = make_url(database_url)
     if url.get_backend_name() != "sqlite":
-        return create_async_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=10)
+        # Yüzlerce userbot'un yazmaları için geniş havuz (PostgreSQL varsayılanı: 100 bağlantı).
+        return create_async_engine(url, pool_pre_ping=True, pool_size=20, max_overflow=30)
 
     if url.database and url.database != ":memory:":
         Path(url.database).parent.mkdir(parents=True, exist_ok=True)

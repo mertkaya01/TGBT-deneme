@@ -15,7 +15,9 @@ ACCESS_DENIED = (
 CANCELLED = "❌ İşlem iptal edildi."
 NOTHING_TO_CANCEL = "İptal edilecek bir işlem yok."
 ACCOUNT_NOT_FOUND = "Hesap bulunamadı."
-UNKNOWN_INPUT = "Anlamadım. Menüyü açmak için /start yazın."
+UNKNOWN_INPUT = (
+    "Anlamadım. Menüyü açmak için /start yazın; bir hesabı açmak için adını yazabilirsiniz."
+)
 USE_BUTTONS = "Lütfen menüdeki butonları kullanın."
 NOT_CONNECTED = "⚠️ Bu hesap şu an bağlı değil. Sistem Kontrolu'ndan yeniden bağlanmayı deneyin."
 
@@ -25,7 +27,14 @@ WELCOME_NEW = (
     "buradan yapabilirsiniz.\n"
     "Başlamak için ilk hesabınızı ekleyelim."
 )
-ACCOUNTS_TITLE = "📱 <b>Hesaplarınız</b> ({count}/{limit})\n\nYönetmek istediğiniz hesabı seçin:"
+ACCOUNTS_TITLE = (
+    "📱 <b>Hesaplarınız</b> ({count}/{limit}){page_info}\n"
+    "🟢 {running} çalışıyor · ⚪ {stopped} kapalı · ⚠️ {problem} sorunlu\n\n"
+    "Yönetmek istediğiniz hesabı seçin:{search_hint}"
+)
+ACCOUNTS_PAGE_INFO = " — sayfa {page}/{pages}"
+ACCOUNTS_SEARCH_HINT = "\n💡 Hesabı hızlı açmak için adını yazıp gönderin."
+ACCOUNT_SEARCH_RESULTS = "🔍 <b>{query}</b> için bulunan hesaplar:"
 SLOT_LIMIT_REACHED = (
     "⚠️ Hesap limitine ulaştınız ({limit}). Yeni hesap eklemek için önce bir hesabı silin."
 )

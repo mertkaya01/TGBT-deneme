@@ -44,7 +44,7 @@ class Settings(DatabaseSettings):
 
     # --- Erişim ---
     admin_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
-    max_accounts_per_user: int = 5
+    max_accounts_per_user: int = 500
 
     # --- Userbot istemcisi ---
     device_model: str = "TGBT Controller"
@@ -54,7 +54,7 @@ class Settings(DatabaseSettings):
     flood_sleep_threshold: int = 60
     long_flood_notify_sec: int = 600
     login_timeout_sec: int = 600
-    login_attempts_per_hour: int = 5
+    login_attempts_per_hour: int = 60
 
     # --- Gönderim ---
     min_cycle_minutes: int = 1

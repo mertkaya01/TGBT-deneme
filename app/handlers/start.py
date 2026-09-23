@@ -108,6 +108,7 @@ async def cmd_help(message: Message) -> None:
 @router.callback_query(MenuCB.filter(F.action == "accounts"))
 async def cb_accounts(
     callback: CallbackQuery,
+    callback_data: MenuCB,
     state: FSMContext,
     session: AsyncSession,
     db_user: User,
@@ -115,7 +116,15 @@ async def cb_accounts(
     settings: Settings,
 ) -> None:
     await cleanup_state(state)
-    await show_accounts(callback, session, db_user, manager, settings)
+    await show_accounts(
+        callback,
+        session,
+        db_user,
+        manager,
+        settings,
+        page=callback_data.page,
+        focus_aid=callback_data.aid,
+    )
     await callback.answer()
 
 
