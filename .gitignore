@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Ortam ve gizli bilgiler
+.env
+
+# Çalışma verisi (SQLite DB, medya, dışa aktarılan oturumlar)
+data/*
+!data/.gitkeep
+*.session
+*.session-journal
