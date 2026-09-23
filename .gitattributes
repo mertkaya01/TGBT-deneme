@@ -1,0 +1,8 @@
+# Windows'ta checkout sırasında satır sonları CRLF'e çevrilmesin: .env.example'dan kopyalanan
+# değerlerin sonuna "\r" eklenip token/hash bozulmasın, Dockerfile ve betikler Linux'ta çalışsın.
+* text=auto eol=lf
+
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.session binary

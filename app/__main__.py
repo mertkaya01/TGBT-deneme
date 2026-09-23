@@ -90,13 +90,28 @@ async def main() -> None:
         await engine.dispose()
 
 
+def format_config_errors(exc: ValidationError) -> str:
+    """Eksik/hatalı .env değerlerini kullanıcıya Türkçe ve madde madde anlatır."""
+    lines = ["Yapılandırma hatası (.env):"]
+    for err in exc.errors():
+        name = str(err["loc"][0]).upper() if err["loc"] else "?"
+        if err["type"] == "missing":
+            reason = "eksik"
+        else:
+            reason = str(err.get("msg", "geçersiz")).removeprefix("Value error, ")
+        lines.append(f"  • {name}: {reason}")
+    lines.append(
+        ".env dosyasının proje klasöründe olduğundan ve adının .env.txt olmadığından emin olun. "
+        "Anahtar üretmek için: docker compose run --rm --no-deps bot python -m app.tools.genkey"
+    )
+    return "\n".join(lines)
+
+
 def run() -> None:
     try:
         get_settings()
     except ValidationError as exc:
-        missing = ", ".join(str(err["loc"][0]).upper() for err in exc.errors())
-        print(f"Yapılandırma hatası: şu değişkenler eksik/geçersiz: {missing}", file=sys.stderr)
-        print(".env.example dosyasını .env olarak kopyalayıp doldurun.", file=sys.stderr)
+        print(format_config_errors(exc), file=sys.stderr)
         raise SystemExit(1) from None
     try:
         with contextlib.suppress(KeyboardInterrupt):

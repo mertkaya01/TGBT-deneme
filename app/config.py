@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
+from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -16,7 +17,11 @@ DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///data/bot.db"
 class DatabaseSettings(BaseSettings):
     """Sadece veritabanı adresi; Alembic bot token'ı olmadan da çalışabilsin diye ayrı."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # str_strip_whitespace: Windows'ta .env satır sonlarındaki "\r" ve kenar boşlukları
+    # token/hash değerlerini bozmasın.
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", str_strip_whitespace=True
+    )
 
     database_url: str = DEFAULT_DATABASE_URL
 
@@ -58,6 +63,18 @@ class Settings(DatabaseSettings):
     max_batch_size: int = 20
     dm_broadcast_min_delay: float = 1.5
     dm_broadcast_max_delay: float = 3.5
+
+    @field_validator("session_encryption_key")
+    @classmethod
+    def _check_encryption_key(cls, value: SecretStr) -> SecretStr:
+        key = value.get_secret_value()
+        if not key:
+            raise ValueError("boş; aşağıdaki komutla bir anahtar üretip .env dosyasına yazın")
+        try:
+            Fernet(key.encode())
+        except (ValueError, TypeError) as exc:
+            raise ValueError("geçerli bir Fernet anahtarı değil (44 karakter olmalı)") from exc
+        return value
 
     @field_validator("admin_ids", mode="before")
     @classmethod

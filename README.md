@@ -66,7 +66,7 @@ app/
 │   └── errors.py            # Telethon hata sınıflandırması
 └── utils/                   # flood kapısı, Redis kilidi, şifreleme, entity & metin yardımcıları
 migrations/                  # Alembic
-tests/                       # 76 test (uçtan uca bot akışları dahil)
+tests/                       # 80 test (uçtan uca bot akışları dahil)
 ```
 
 ## Kurulum
@@ -74,26 +74,68 @@ tests/                       # 76 test (uçtan uca bot akışları dahil)
 ### 1) Ön hazırlık
 1. [@BotFather](https://t.me/BotFather)'dan bir bot oluşturup **BOT_TOKEN** alın.
 2. [my.telegram.org](https://my.telegram.org) → *API development tools* bölümünden **API_ID** ve **API_HASH** alın.
-3. `.env.example` dosyasını `.env` olarak kopyalayıp doldurun. Şifreleme anahtarı için:
-   ```bash
-   python -m app.tools.genkey   # çıktıyı SESSION_ENCRYPTION_KEY'e yazın
-   ```
-   > ⚠️ Bu anahtarı yedekleyin. Kaybolursa kayıtlı hesapların oturumları çözülemez.
+3. Kendi Telegram kullanıcı ID'nizi öğrenin (örn. [@userinfobot](https://t.me/userinfobot)); bu değer **ADMIN_IDS** olacak.
 
-### 2a) Docker ile (önerilen)
-```bash
-mkdir -p data && sudo chown 1000:1000 data   # konteyner kullanıcısı yazabilsin
+> `.env` dosyası gizli bilgiler içerdiği için repoda **bulunmaz**; aşağıdaki adımlarla `.env.example`'dan siz oluşturursunuz.
+
+### 2a) Docker ile — Windows (PowerShell)
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) kurulu ve açık olmalı. PowerShell'i proje klasöründe açın:
+```powershell
+cd "C:\...\TGBT-deneme"
+
+# 1) .env dosyasını oluştur (Gezgin/Not Defteri yerine bu komutu kullanın, adı .env.txt olmasın)
+Copy-Item .env.example .env
+Get-ChildItem -Force -Filter ".env*"       # listede ".env" görünmeli, ".env.txt" değil
+
+# 2) Şifreleme anahtarı üret (bilgisayarda Python gerekmez); çıkan 44 karakterlik değeri kopyalayın
+docker compose run --rm --no-deps --build bot python -m app.tools.genkey
+
+# 3) .env'i düzenle: BOT_TOKEN, API_ID, API_HASH, ADMIN_IDS ve SESSION_ENCRYPTION_KEY
+notepad .env
+
+# 4) Başlat ve logları izle
 docker compose up -d --build
 docker compose logs -f bot
 ```
-PostgreSQL ve Redis compose tarafından ayağa kaldırılır. Migration'lar açılışta otomatik uygulanır.
+> Anahtarı `... > .env` veya `>>` ile dosyaya **yönlendirmeyin**: Windows PowerShell dosyayı UTF-16 yazar ve
+> Docker okuyamaz. Not Defteri ile yapıştırıp kaydedin.
 
-### 2b) Yerel geliştirme
+### 2b) Docker ile — Linux / macOS
 ```bash
-python3.11 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-python -m app          # SQLite + (REDIS_URL boşsa) bellek içi FSM
+cp .env.example .env
+docker compose run --rm --no-deps --build bot python -m app.tools.genkey   # çıktıyı SESSION_ENCRYPTION_KEY'e yazın
+nano .env                                    # BOT_TOKEN, API_ID, API_HASH, ADMIN_IDS
+mkdir -p data && sudo chown 1000:1000 data   # konteyner kullanıcısı yazabilsin (yalnızca Linux)
+docker compose up -d --build
+docker compose logs -f bot
 ```
+
+PostgreSQL ve Redis compose tarafından ayağa kaldırılır, migration'lar açılışta otomatik uygulanır.
+
+> ⚠️ `SESSION_ENCRYPTION_KEY`'i yedekleyin. Kaybolursa kayıtlı hesapların oturumları çözülemez ve hesapları
+> yeniden eklemeniz gerekir.
+
+### 2c) Docker'sız yerel geliştirme
+```bash
+# Linux / macOS
+python3.11 -m venv .venv && source .venv/bin/activate
+# Windows (PowerShell)
+py -3.11 -m venv .venv; .venv\Scripts\Activate.ps1
+
+pip install -r requirements-dev.txt
+python -m app.tools.genkey   # anahtar üret
+python -m app                # SQLite + (REDIS_URL boşsa) bellek içi FSM
+```
+
+### Sık karşılaşılan hatalar
+| Hata | Çözüm |
+|---|---|
+| `env file ...\.env not found` | `.env` proje klasöründe yok. `Copy-Item .env.example .env` (Linux: `cp .env.example .env`) çalıştırın. `Get-ChildItem -Force` ile adının `.env.txt` olmadığını kontrol edin; öyleyse `Rename-Item .env.txt .env`. |
+| `unexpected character "�" in variable name` | `.env` UTF-16 kaydedilmiş (PowerShell `>` yönlendirmesi). Dosyayı `Copy-Item .env.example .env` ile yeniden oluşturup Not Defteri ile düzenleyin. |
+| `Yapılandırma hatası (.env): • X: eksik` | Listelenen değişkeni `.env`'e yazın, ardından `docker compose up -d` ile yeniden başlatın. |
+| `SESSION_ENCRYPTION_KEY: boş` / `geçerli bir Fernet anahtarı değil` | `docker compose run --rm --no-deps bot python -m app.tools.genkey` çıktısını `.env`'e yapıştırın. |
+| `BOT_TOKEN geçersiz` | Token'ı @BotFather'dan tekrar kopyalayın; başında/sonunda boşluk veya tırnak olmasın. |
+| `Cannot connect to the Docker daemon` / `pipe/dockerDesktopLinuxEngine` | Docker Desktop açık değil; başlatıp birkaç saniye bekleyin. |
 
 ## Kullanım
 
@@ -147,7 +189,7 @@ Aynı hesap iki süreçte çalışmasın diye Redis kilidi (`SET NX PX` + heartb
 ## Geliştirme
 
 ```bash
-pytest                   # 76 test (SQLite)
+pytest                   # 80 test (SQLite)
 TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost/tgbt pytest   # PostgreSQL ile
 ruff check . && ruff format --check .
 alembic revision --autogenerate -m "açıklama"   # model değişikliğinden sonra
