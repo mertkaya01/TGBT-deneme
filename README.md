@@ -117,6 +117,11 @@ PostgreSQL ve Redis compose tarafından ayağa kaldırılır, migration'lar aç�
 > ⚠️ `SESSION_ENCRYPTION_KEY`'i yedekleyin. Kaybolursa kayıtlı hesapların oturumları çözülemez ve hesapları
 > yeniden eklemeniz gerekir.
 
+### 2b′) Sunucuya (VPS) kurulum
+Botu 7/24 çalıştırmak için bir Linux sunucusuna kurulum, yedekleme ve güncelleme adımları:
+**[docs/VPS_KURULUM.md](docs/VPS_KURULUM.md)**. Hazır betikler `scripts/` klasöründedir
+(`vps-setup.sh`, `backup.sh`, `restore.sh`, `update.sh`).
+
 ### 2c) Docker'sız yerel geliştirme
 ```bash
 # Linux / macOS
