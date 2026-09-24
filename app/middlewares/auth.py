@@ -36,6 +36,10 @@ class AuthMiddleware(BaseMiddleware):
         tg_user: TgUser | None = data.get("event_from_user")
         if tg_user is None or tg_user.is_bot:
             return None
+        if isinstance(event, Update) and event.inline_query is not None:
+            # Butonlu oto-cevap için userbot hesaplarından gelen inline sorgular: handler, sorguyu
+            # yalnızca kayıtlı bir userbot hesabından geliyorsa cevaplar.
+            return await handler(event, data)
         session: AsyncSession = data["session"]
         user, created = await repo.upsert_user(
             session,

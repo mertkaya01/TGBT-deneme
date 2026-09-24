@@ -14,6 +14,7 @@ from telethon.tl import types as tl
 from app.database.models import AutoMessageConfig, ContentType, DMAutoReplyConfig
 from app.userbots.errors import ErrorAction, classify, wait_seconds
 from app.utils.entities import EntityDict, to_telethon_entities
+from app.utils.whatsapp import append_link
 
 if TYPE_CHECKING:
     from telethon import TelegramClient
@@ -80,10 +81,14 @@ class OutgoingContent:
 
     @classmethod
     def from_dm_config(cls, cfg: DMAutoReplyConfig) -> OutgoingContent:
+        text, entities = cfg.text or "", list(cfg.entities or [])
+        if cfg.whatsapp_url:
+            # Userbot buton gönderemez; bot üzerinden gönderilemezse link metnin sonuna eklenir.
+            text, entities = append_link(text, entities, cfg.button_text, cfg.whatsapp_url)
         return cls(
             content_type=ContentType.PHOTO if cfg.photo_path else ContentType.TEXT,
-            text=cfg.text or "",
-            entities=list(cfg.entities or []),
+            text=text,
+            entities=entities,
             photo_path=cfg.photo_path,
         )
 

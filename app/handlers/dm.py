@@ -7,14 +7,15 @@ import time
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import texts
 from app.config import Settings
 from app.database import repositories as repo
-from app.database.models import Account, ContentType, User
+from app.database.models import Account, ContentType, DMReplyMode, User
 from app.handlers.common import (
     answer_not_found,
     cleanup_state,
@@ -29,11 +30,14 @@ from app.states.states import DMStates
 from app.userbots.broadcast import BroadcastProgress
 from app.userbots.sender import OutgoingContent
 from app.userbots.userbot_manager import UserbotManager
-from app.utils.entities import serialize_entities
+from app.utils.entities import serialize_entities, to_aiogram_entities
+from app.utils.text import normalize_phone
+from app.utils.whatsapp import DEFAULT_BUTTON_TEXT, MAX_BUTTON_TEXT, MAX_PREFILLED_MESSAGE
 
 router = Router(name="dm")
 
 PROGRESS_EDIT_INTERVAL = 3.0
+COOLDOWN_PRESETS_MIN = (1, 5, 15, 30, 60, 180, 720, 1440)
 
 
 async def _content_from_message(
@@ -215,9 +219,15 @@ async def _show_dm_settings(
             preview = "🖼 <i>fotoğraf</i>\n" + preview
     else:
         preview = texts.CONTENT_NONE
+    mode = texts.DM_MODE_NAMES[dm.reply_mode]
+    if dm.reply_mode == DMReplyMode.ALWAYS:
+        mode += texts.DM_MODE_ALWAYS_DETAIL.format(minutes=dm.repeat_cooldown_min)
+    whatsapp = f"+{dm.whatsapp_phone}" if dm.whatsapp_phone else texts.STATE_OFF
     text = texts.DM_SETTINGS.format(
         name=texts.html(account.name),
         state=texts.on_off(account.dm_auto_reply_enabled),
+        mode=mode,
+        whatsapp=whatsapp,
         contacts=texts.on_off(not dm.skip_contacts),
         replied=replied,
         preview=preview,
@@ -325,9 +335,224 @@ async def dm_reply_received(
     dm = account.dm_config
     old_photo = dm.photo_path
     dm.text, dm.entities, dm.photo_path = content["text"], content["entities"], content["photo"]
+    # Butonlu cevap bot üzerinden gönderilirken fotoğraf, botun kendi file_id'siyle kullanılır.
+    dm.photo_file_id = message.photo[-1].file_id if message.photo else None
     await session.commit()
     if old_photo and old_photo != dm.photo_path:
         remove_file(old_photo)
     await manager.refresh_settings(account.id)
     await message.answer(texts.DM_REPLY_SAVED)
     await _show_dm_settings(message, session, account)
+
+
+# =========================================================================== cevap modu
+
+
+@router.callback_query(DmCB.filter(F.action.in_({"mode", "cooldown"})))
+async def dm_mode(
+    callback: CallbackQuery,
+    callback_data: DmCB,
+    session: AsyncSession,
+    db_user: User,
+    manager: UserbotManager,
+) -> None:
+    account = await get_account(session, db_user, callback_data.aid)
+    if account is None:
+        await answer_not_found(callback)
+        return
+    dm = account.dm_config
+    if callback_data.action == "mode":
+        dm.reply_mode = (
+            DMReplyMode.ALWAYS if dm.reply_mode == DMReplyMode.FIRST else DMReplyMode.FIRST
+        )
+        toast = texts.DM_MODE_CHANGED.format(mode=texts.DM_MODE_NAMES[dm.reply_mode])
+    else:
+        later = [m for m in COOLDOWN_PRESETS_MIN if m > dm.repeat_cooldown_min]
+        dm.repeat_cooldown_min = later[0] if later else COOLDOWN_PRESETS_MIN[0]
+        toast = texts.BTN_DM_COOLDOWN.format(minutes=dm.repeat_cooldown_min)
+    await session.commit()
+    await manager.refresh_settings(account.id)
+    await callback.answer(toast)
+    await _show_dm_settings(callback, session, account)
+
+
+# =========================================================================== WhatsApp butonu
+
+
+async def _show_whatsapp_menu(
+    target: CallbackQuery | Message, account: Account, manager: UserbotManager, bot: Bot
+) -> None:
+    dm = account.dm_config
+    me = await bot.get_me()  # inline mod sonradan açılmış olabilir: her seferinde taze bilgi
+    manager.set_controller_bot(me.username, bool(me.supports_inline_queries))
+    if not dm.whatsapp_phone:
+        status = texts.WA_STATUS_OFF
+    elif me.supports_inline_queries:
+        status = texts.WA_STATUS_OK.format(bot=me.username)
+    else:
+        status = texts.WA_STATUS_NO_INLINE.format(bot=me.username)
+    text = texts.WA_MENU.format(
+        name=texts.html(account.name),
+        phone=f"<code>+{dm.whatsapp_phone}</code>" if dm.whatsapp_phone else texts.STATE_OFF,
+        button=texts.html(dm.button_text),
+        message=texts.html(dm.whatsapp_message) if dm.whatsapp_message else "—",
+        status=status,
+    )
+    await edit_or_send(target, text, inline.whatsapp_menu(account.id, dm))
+
+
+@router.callback_query(DmCB.filter(F.action == "wa"))
+async def whatsapp_menu(
+    callback: CallbackQuery,
+    callback_data: DmCB,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: User,
+    manager: UserbotManager,
+    bot: Bot,
+) -> None:
+    await cleanup_state(state)
+    account = await get_account(session, db_user, callback_data.aid)
+    if account is None:
+        await answer_not_found(callback)
+        return
+    await callback.answer()
+    await _show_whatsapp_menu(callback, account, manager, bot)
+
+
+WA_PROMPTS = {
+    "wa_phone": (DMStates.wa_phone, lambda: texts.ASK_WA_PHONE),
+    "wa_btn": (
+        DMStates.wa_button,
+        lambda: texts.ASK_WA_BUTTON.format(max=MAX_BUTTON_TEXT, default=DEFAULT_BUTTON_TEXT),
+    ),
+    "wa_msg": (
+        DMStates.wa_message,
+        lambda: texts.ASK_WA_MESSAGE.format(max=MAX_PREFILLED_MESSAGE),
+    ),
+}
+
+
+@router.callback_query(DmCB.filter(F.action.in_(set(WA_PROMPTS))))
+async def whatsapp_prompt(
+    callback: CallbackQuery,
+    callback_data: DmCB,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: User,
+) -> None:
+    if await get_account(session, db_user, callback_data.aid) is None:
+        await answer_not_found(callback)
+        return
+    next_state, prompt = WA_PROMPTS[callback_data.action]
+    await state.set_state(next_state)
+    await state.update_data(aid=callback_data.aid)
+    await edit_or_send(callback, prompt(), inline.cancel_flow(callback_data.aid))
+    await callback.answer()
+
+
+@router.message(StateFilter(DMStates.wa_phone, DMStates.wa_button, DMStates.wa_message), F.text)
+async def whatsapp_value(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: User,
+    manager: UserbotManager,
+    bot: Bot,
+) -> None:
+    current = await state.get_state()
+    value = (message.text or "").strip()
+    data = await state.get_data()
+    account = await get_account(session, db_user, data["aid"])
+    if account is None:
+        await state.clear()
+        await message.answer(texts.ACCOUNT_NOT_FOUND)
+        return
+    dm = account.dm_config
+
+    if current == DMStates.wa_phone.state:
+        phone = normalize_phone(value)
+        if phone is None:
+            await message.answer(texts.INVALID_PHONE)
+            return
+        dm.whatsapp_phone = phone.removeprefix("+")
+    elif current == DMStates.wa_button.state:
+        if not 1 <= len(value) <= MAX_BUTTON_TEXT:
+            await message.answer(texts.INVALID_WA_BUTTON.format(max=MAX_BUTTON_TEXT))
+            return
+        dm.whatsapp_button_text = value
+    else:
+        if len(value) > MAX_PREFILLED_MESSAGE:
+            await message.answer(texts.INVALID_WA_MESSAGE.format(max=MAX_PREFILLED_MESSAGE))
+            return
+        dm.whatsapp_message = None if value == "-" else value
+
+    await state.clear()
+    await session.commit()
+    await manager.refresh_settings(account.id)
+    await message.answer(texts.WA_SAVED)
+    await _show_whatsapp_menu(message, account, manager, bot)
+
+
+@router.callback_query(DmCB.filter(F.action == "wa_rm"))
+async def whatsapp_remove(
+    callback: CallbackQuery,
+    callback_data: DmCB,
+    session: AsyncSession,
+    db_user: User,
+    manager: UserbotManager,
+    bot: Bot,
+) -> None:
+    account = await get_account(session, db_user, callback_data.aid)
+    if account is None:
+        await answer_not_found(callback)
+        return
+    dm = account.dm_config
+    dm.whatsapp_phone = dm.whatsapp_button_text = dm.whatsapp_message = None
+    await session.commit()
+    await manager.refresh_settings(account.id)
+    await callback.answer(texts.WA_REMOVED)
+    await _show_whatsapp_menu(callback, account, manager, bot)
+
+
+# =========================================================================== önizleme
+
+
+@router.callback_query(DmCB.filter(F.action == "preview"))
+async def dm_preview(
+    callback: CallbackQuery,
+    callback_data: DmCB,
+    session: AsyncSession,
+    db_user: User,
+    bot: Bot,
+) -> None:
+    account = await get_account(session, db_user, callback_data.aid)
+    if account is None:
+        await answer_not_found(callback)
+        return
+    dm = account.dm_config
+    if not dm.is_configured:
+        await callback.answer(texts.DM_REPLY_NOT_CONFIGURED, show_alert=True)
+        return
+    await callback.answer()
+    chat_id = callback.from_user.id
+    markup = inline.whatsapp_button(dm)
+    entities = to_aiogram_entities(dm.entities) or None
+    await bot.send_message(chat_id, texts.DM_PREVIEW_HEADER)
+    if dm.photo_file_id or dm.photo_path:
+        photo = dm.photo_file_id or FSInputFile(dm.photo_path or "")
+        await bot.send_photo(
+            chat_id,
+            photo,
+            caption=dm.text or None,
+            caption_entities=entities,
+            parse_mode=None,
+            reply_markup=markup,
+        )
+    else:
+        await bot.send_message(
+            chat_id, dm.text, entities=entities, parse_mode=None, reply_markup=markup
+        )
+    await _show_dm_settings(
+        callback.message if isinstance(callback.message, Message) else callback, session, account
+    )

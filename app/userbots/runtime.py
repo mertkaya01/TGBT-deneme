@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from app.database.models import MatchType
+from app.database.models import DMReplyMode, MatchType
 from app.utils.flood import FloodGate
 from app.utils.text import keyword_matches
 
@@ -29,6 +29,34 @@ class CompiledFilter:
 
     def matches(self, normalized_text: str) -> bool:
         return any(keyword_matches(normalized_text, kw, self.match_type) for kw in self.keywords)
+
+
+# Userbot, butonlu oto-cevabı controller bot'a bu inline sorguyla hazırlatır.
+DM_REPLY_INLINE_QUERY = "dm_reply"
+INLINE_RETRY_SEC = 600
+
+
+@dataclass
+class ControllerBot:
+    """Tüm userbot'ların paylaştığı controller bot bilgisi (butonlu cevaplar için).
+
+    Telegram'da yalnızca botlar buton gönderebildiği için userbot, cevabı botun inline modu
+    üzerinden gönderir ("via @bot"). Inline mod kapalıysa bir süre düz metin + link kullanılır.
+    """
+
+    username: str | None = None
+    inline_enabled: bool = False
+    retry_at: float = 0.0
+
+    def can_use_inline(self) -> bool:
+        return bool(self.username) and (self.inline_enabled or time.monotonic() >= self.retry_at)
+
+    def mark_inline_ok(self) -> None:
+        self.inline_enabled = True
+
+    def mark_inline_failed(self) -> None:
+        self.inline_enabled = False
+        self.retry_at = time.monotonic() + INLINE_RETRY_SEC
 
 
 @dataclass(slots=True, frozen=True)
@@ -57,7 +85,10 @@ class AccountRuntime:
     # --- ayar önbelleği
     dm_auto_reply_enabled: bool = False
     dm_skip_contacts: bool = False
-    dm_sender: MessageSender | None = None
+    dm_sender: MessageSender | None = None  # düz gönderim (inline kullanılamazsa link ekli)
+    dm_mode: DMReplyMode = DMReplyMode.FIRST
+    dm_cooldown_sec: int = 300
+    dm_has_button: bool = False  # WhatsApp butonu ayarlı mı
     filters: list[CompiledFilter] = field(default_factory=list)
     exception_ids: set[int] = field(default_factory=set)
 
@@ -66,6 +97,7 @@ class AccountRuntime:
     slowmode_until: dict[int, float] = field(default_factory=dict)
     dm_known_peers: set[int] = field(default_factory=set)
     dm_inflight: set[int] = field(default_factory=set)
+    dm_last_reply: dict[int, float] = field(default_factory=dict)  # "her mesaja" modunda bekleme
     worker_task: asyncio.Task | None = None
     broadcast: BroadcastJob | None = None
     groups_cache: tuple[float, list[GroupInfo]] | None = None

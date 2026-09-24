@@ -29,7 +29,7 @@ from app.database.models import Account, AccountStatus, ReplyFilter
 from app.userbots.broadcast import BroadcastJob, ProgressCallback, collect_dm_targets
 from app.userbots.errors import ErrorAction, classify
 from app.userbots.event_handlers import UserbotEventHandlers
-from app.userbots.runtime import AccountRuntime, CompiledFilter, GroupInfo
+from app.userbots.runtime import AccountRuntime, CompiledFilter, ControllerBot, GroupInfo
 from app.userbots.sender import (
     MessageSender,
     OutgoingContent,
@@ -154,6 +154,7 @@ class UserbotManager:
         self._client_factory = client_factory
 
         self.runtimes: dict[int, AccountRuntime] = {}
+        self.controller_bot = ControllerBot()
         self._handlers: dict[int, UserbotEventHandlers] = {}
         self._account_locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._pending: dict[int, PendingLogin] = {}
@@ -309,7 +310,7 @@ class UserbotManager:
         )
         self.runtimes[account.id] = runtime
         await self.refresh_settings(account.id)
-        handlers = UserbotEventHandlers(runtime, self._session_maker)
+        handlers = UserbotEventHandlers(runtime, self._session_maker, self.controller_bot)
         handlers.register()
         self._handlers[account.id] = handlers
         log.info("[%s] userbot bağlandı: %s", account.name, display_name(me))
@@ -398,6 +399,13 @@ class UserbotManager:
         with contextlib.suppress(Exception):
             await self._notify(account.owner_id, template.format(name=texts.html(account.name)))
 
+    def set_controller_bot(self, username: str | None, inline_enabled: bool) -> None:
+        self.controller_bot.username = username
+        if inline_enabled:
+            self.controller_bot.mark_inline_ok()
+        else:
+            self.controller_bot.mark_inline_failed()
+
     def get_runtime(self, account_id: int) -> AccountRuntime | None:
         return self.runtimes.get(account_id)
 
@@ -420,6 +428,10 @@ class UserbotManager:
         runtime.name = account.name
         runtime.dm_auto_reply_enabled = account.dm_auto_reply_enabled
         runtime.dm_skip_contacts = bool(dm and dm.skip_contacts)
+        if dm is not None:
+            runtime.dm_mode = dm.reply_mode
+            runtime.dm_cooldown_sec = max(dm.repeat_cooldown_min, 1) * 60
+            runtime.dm_has_button = dm.whatsapp_url is not None
         runtime.dm_sender = (
             MessageSender(runtime.client, OutgoingContent.from_dm_config(dm))
             if dm is not None and dm.is_configured

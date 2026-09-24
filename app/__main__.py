@@ -69,8 +69,15 @@ async def main() -> None:
 
     async def on_startup() -> None:
         await bot.set_my_commands(BOT_COMMANDS)
-        await manager.start()
         me = await bot.get_me()
+        manager.set_controller_bot(me.username, bool(me.supports_inline_queries))
+        if not me.supports_inline_queries:
+            log.warning(
+                "@%s için inline mod kapalı: WhatsApp butonları link olarak gönderilecek. "
+                "Açmak için @BotFather → /setinline",
+                me.username,
+            )
+        await manager.start()
         log.info("Controller bot hazır: @%s", me.username)
 
     async def on_shutdown() -> None:

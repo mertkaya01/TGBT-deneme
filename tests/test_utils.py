@@ -207,3 +207,25 @@ async def test_flood_gate_waits_for_penalty():
     await asyncio.wait_for(gate.wait(), 1)
     assert slept == [10]
     assert gate.remaining == 0
+
+
+# --------------------------------------------------------------------------- WhatsApp
+
+
+def test_whatsapp_url_and_link_fallback():
+    from app.utils.whatsapp import append_link, whatsapp_url
+
+    assert whatsapp_url("905551112233") == "https://wa.me/905551112233"
+    assert (
+        whatsapp_url("905551112233", "Merhaba, fiyat?")
+        == "https://wa.me/905551112233?text=Merhaba%2C%20fiyat%3F"
+    )
+    # Metin yoksa link tek başına, varsa iki satır aşağıya eklenir; mevcut biçimlendirme korunur.
+    assert append_link("", [], "Yaz", "https://x") == (
+        "Yaz",
+        [{"type": "text_link", "offset": 0, "length": 3, "url": "https://x"}],
+    )
+    bold = {"type": "bold", "offset": 0, "length": 2}
+    text, entities = append_link("😊 Selam", [bold], "WA", "https://x")
+    assert text == "😊 Selam\n\nWA"
+    assert entities == [bold, {"type": "text_link", "offset": 10, "length": 2, "url": "https://x"}]

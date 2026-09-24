@@ -125,6 +125,9 @@ class FakeClient:
         self.failures: dict[Any, list[BaseException]] = {}
         self.uploads = 0
         self.history: dict[Any, list[Any]] = {}
+        self.outgoing: dict[Any, list[Any]] = {}  # get_messages(from_user="me") sonuçları
+        self.inline_queries: list[tuple[str, str]] = []
+        self.inline_error: BaseException | None = None
         self.source_message = SimpleNamespace(
             id=42, message="Kaynak metin", entities=[], media=None
         )
@@ -183,10 +186,24 @@ class FakeClient:
     async def get_dialogs(self, limit=None):
         return self.dialogs
 
-    async def get_messages(self, entity, ids=None, limit=None, max_id=None):
+    async def get_messages(self, entity, ids=None, limit=None, max_id=None, from_user=None):
         if ids is not None:
             return self.source_message
+        if from_user == "me":
+            return self.outgoing.get(entity, [])
         return self.history.get(entity, [])
+
+    async def inline_query(self, bot, query, entity=None):
+        self.inline_queries.append((bot, query))
+        if self.inline_error is not None:
+            raise self.inline_error
+        client = self
+
+        class _Result:
+            async def click(self, entity=None):
+                client.calls.append(("inline", entity, {"bot": bot, "query": query}))
+
+        return [_Result()]
 
     def is_connected(self) -> bool:
         return self.connected

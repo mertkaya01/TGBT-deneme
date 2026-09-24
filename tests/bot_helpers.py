@@ -8,8 +8,8 @@ from typing import Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import EditMessageText, SendMessage, TelegramMethod
-from aiogram.types import CallbackQuery, Chat, Message, MessageEntity, Update
+from aiogram.methods import EditMessageText, GetMe, SendMessage, TelegramMethod
+from aiogram.types import CallbackQuery, Chat, InlineQuery, Message, MessageEntity, Update
 from aiogram.types import User as TgUser
 
 ADMIN_ID = 1
@@ -21,9 +21,18 @@ class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
         self.requests: list[TelegramMethod[Any]] = []
+        self.inline_enabled = True
 
     async def make_request(self, bot: Bot, method: TelegramMethod[Any], timeout: int | None = None):  # noqa: ASYNC109
         self.requests.append(method)
+        if isinstance(method, GetMe):
+            return TgUser(
+                id=42,
+                is_bot=True,
+                first_name="Bot",
+                username="tgbt_test_bot",
+                supports_inline_queries=self.inline_enabled,
+            )
         if isinstance(method, SendMessage):
             return Message(
                 message_id=next(_ids),
@@ -88,3 +97,23 @@ async def press(dp: Dispatcher, bot: Bot, data: str, user_id: int = ADMIN_ID) ->
         data=data,
     )
     await dp.feed_update(bot, Update(update_id=next(_ids), callback_query=callback.as_(bot)))
+
+
+async def send_inline_query(dp: Dispatcher, bot: Bot, user_id: int, query: str) -> None:
+    inline_query = InlineQuery(
+        id=str(next(_ids)), from_user=tg_user(user_id), query=query, offset=""
+    )
+    await dp.feed_update(bot, Update(update_id=next(_ids), inline_query=inline_query.as_(bot)))
+
+
+async def login(dp: Dispatcher, bot: Bot, api: RecordingSession, session_maker) -> int:
+    """Admin kullanıcısıyla "Deneme" hesabını ekler, hesabın id'sini döndürür."""
+    from sqlalchemy import select
+
+    from app.database.models import Account
+
+    for text in ("/start", "Deneme", "+905551234567", "1 2 3 4 5"):
+        await send_text(dp, bot, text)
+    api.take()
+    async with session_maker() as session:
+        return await session.scalar(select(Account.id))

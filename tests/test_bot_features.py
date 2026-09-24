@@ -7,22 +7,13 @@ import asyncio
 from types import SimpleNamespace
 
 from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
-from sqlalchemy import select
 
 from app import texts
 from app.database import repositories as repo
 from app.database.models import Account, MatchType
 from app.keyboards.callbacks import AccountCB, DmCB, ExceptionCB, FilterCB, OtherCB
-from tests.bot_helpers import buttons_of, press, send_text, texts_of
+from tests.bot_helpers import buttons_of, login, press, send_text, texts_of
 from tests.conftest import FakeDialog
-
-
-async def login(dp, bot, api, session_maker) -> int:
-    for text in ("/start", "Deneme", "+905551234567", "1 2 3 4 5"):
-        await send_text(dp, bot, text)
-    api.take()
-    async with session_maker() as session:
-        return await session.scalar(select(Account.id))
 
 
 def answers(requests) -> list[str | None]:

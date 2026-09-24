@@ -9,6 +9,7 @@ from app.handlers import (
     dm,
     exceptions,
     fallback,
+    inline_reply,
     login_handler,
     other_features,
     reply_filters,
@@ -28,6 +29,7 @@ def build_root_router() -> Router:
         dm.router,
         reply_filters.router,
         exceptions.router,
+        inline_reply.router,
         fallback.router,
     )
     return root

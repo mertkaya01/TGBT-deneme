@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
+from telethon import errors
+
 from app.database import repositories as repo
-from app.database.models import MatchType
+from app.database.models import DMReplyMode, MatchType, utcnow
 from app.userbots.event_handlers import UserbotEventHandlers
-from app.userbots.runtime import AccountRuntime, CompiledFilter
+from app.userbots.runtime import (
+    DM_REPLY_INLINE_QUERY,
+    AccountRuntime,
+    CompiledFilter,
+    ControllerBot,
+)
 from app.userbots.sender import MessageSender, OutgoingContent
+from app.utils.whatsapp import append_link
 from tests.conftest import FakeClient
 
 
@@ -105,3 +114,88 @@ async def test_group_keyword_filter_with_cooldown_and_exceptions(session_maker, 
     assert replies[0][1] == "peer:-100"
     assert replies[0][2]["reply_to"] == 77
     assert replies[0][2]["text"] == "Fiyat için DM atın"
+
+
+# --------------------------------------------------------------------------- her mesaja cevap
+
+
+def always_mode(runtime: AccountRuntime, cooldown_sec: int = 300) -> AccountRuntime:
+    runtime.dm_mode = DMReplyMode.ALWAYS
+    runtime.dm_cooldown_sec = cooldown_sec
+    return runtime
+
+
+async def test_always_mode_replies_to_known_contacts_with_cooldown(session_maker, account):
+    client = FakeClient()
+    client.history[1003] = [
+        SimpleNamespace(id=5)
+    ]  # eski tanıdık: "ilk mesaj" modunda cevap almazdı
+    runtime = always_mode(make_runtime(client, account))
+    handlers = UserbotEventHandlers(runtime, session_maker)
+
+    await handlers.on_private_message(FakeEvent(sender_id=1003, chat_id=1003))
+    await handlers.on_private_message(FakeEvent(sender_id=1003, chat_id=1003, msg_id=11))
+    assert len(client.of_kind("message")) == 1  # bekleme süresi içinde tekrar yok
+
+    runtime.dm_last_reply[1003] -= 301  # bekleme süresi doldu
+    await handlers.on_private_message(FakeEvent(sender_id=1003, chat_id=1003, msg_id=12))
+    assert len(client.of_kind("message")) == 2
+
+
+async def test_always_mode_stays_quiet_while_account_is_chatting(session_maker, account):
+    client = FakeClient()
+    # Hesap bu kişiye 1 dk önce kendisi yazmış (elle sohbet): oto-cevap araya girmemeli.
+    client.outgoing[1004] = [SimpleNamespace(id=9, date=utcnow() - timedelta(minutes=1))]
+    handlers = UserbotEventHandlers(always_mode(make_runtime(client, account)), session_maker)
+
+    await handlers.on_private_message(FakeEvent(sender_id=1004, chat_id=1004))
+    assert client.calls == []
+
+    client.outgoing[1004] = [SimpleNamespace(id=9, date=utcnow() - timedelta(hours=1))]
+    handlers._rt.dm_last_reply.clear()
+    await handlers.on_private_message(FakeEvent(sender_id=1004, chat_id=1004, msg_id=11))
+    assert len(client.of_kind("message")) == 1
+
+
+# --------------------------------------------------------------------------- WhatsApp butonu
+
+
+def with_whatsapp_button(runtime: AccountRuntime, client: FakeClient) -> AccountRuntime:
+    text, entities = append_link(
+        "Merhaba!", [], "💬 WhatsApp'tan Yaz", "https://wa.me/905551112233"
+    )
+    runtime.dm_sender = MessageSender(client, OutgoingContent(text=text, entities=entities))
+    runtime.dm_has_button = True
+    return runtime
+
+
+async def test_button_reply_is_sent_through_controller_bot(session_maker, account):
+    client = FakeClient()
+    runtime = with_whatsapp_button(make_runtime(client, account), client)
+    bot = ControllerBot(username="tgbt_bot", inline_enabled=True)
+    handlers = UserbotEventHandlers(runtime, session_maker, bot)
+
+    await handlers.on_private_message(FakeEvent(sender_id=1005, chat_id=1005))
+
+    assert client.inline_queries == [("tgbt_bot", DM_REPLY_INLINE_QUERY)]
+    assert client.of_kind("inline") == [
+        ("inline", "peer:1005", {"bot": "tgbt_bot", "query": DM_REPLY_INLINE_QUERY})
+    ]
+    assert client.of_kind("message") == []
+
+
+async def test_inline_disabled_falls_back_to_text_link(session_maker, account):
+    client = FakeClient()
+    client.inline_error = errors.BotInlineDisabledError(request=None)
+    runtime = with_whatsapp_button(make_runtime(client, account), client)
+    bot = ControllerBot(username="tgbt_bot", inline_enabled=True)
+    handlers = UserbotEventHandlers(runtime, session_maker, bot)
+
+    await handlers.on_private_message(FakeEvent(sender_id=1006, chat_id=1006))
+
+    [reply] = client.of_kind("message")
+    assert reply[2]["text"] == "Merhaba!\n\n💬 WhatsApp'tan Yaz"
+    [link] = reply[2]["entities"]
+    assert link.url == "https://wa.me/905551112233"
+    assert (link.offset, link.length) == (10, 19)  # emoji UTF-16'da 2 birim sayılır
+    assert not bot.can_use_inline()  # bir süre tekrar denenmez

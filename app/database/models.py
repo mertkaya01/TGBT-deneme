@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, UTCDateTime
+from app.utils.whatsapp import DEFAULT_BUTTON_TEXT, whatsapp_url
 
 
 def utcnow() -> datetime:
@@ -49,6 +50,11 @@ class ContentType(StrEnum):
     TEXT = "text"
     PHOTO = "photo"
     FORWARD = "forward"
+
+
+class DMReplyMode(StrEnum):
+    FIRST = "first"  # yalnızca ilk kez yazanlara
+    ALWAYS = "always"  # her mesaja (aynı kişiye bekleme süresiyle)
 
 
 class MatchType(StrEnum):
@@ -209,7 +215,7 @@ class ExceptionChat(Base):
 
 
 class DMAutoReplyConfig(Base):
-    """Hesaba özelden ilk kez yazanlara gönderilecek otomatik cevap."""
+    """Hesaba özelden yazanlara gönderilecek otomatik cevap (+ isteğe bağlı WhatsApp butonu)."""
 
     __tablename__ = "dm_auto_reply_configs"
 
@@ -220,13 +226,32 @@ class DMAutoReplyConfig(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     entities: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     photo_path: Mapped[str | None] = mapped_column(String(512))
+    # Controller bot'un file_id'si: butonlu cevap bot üzerinden (inline) gönderilirken kullanılır.
+    photo_file_id: Mapped[str | None] = mapped_column(String(256))
     skip_contacts: Mapped[bool] = mapped_column(Boolean, default=False)
+    reply_mode: Mapped[DMReplyMode] = mapped_column(
+        _enum(DMReplyMode), default=DMReplyMode.FIRST, server_default=DMReplyMode.FIRST.value
+    )
+    repeat_cooldown_min: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    whatsapp_phone: Mapped[str | None] = mapped_column(String(20))  # yalnızca rakamlar
+    whatsapp_button_text: Mapped[str | None] = mapped_column(String(64))
+    whatsapp_message: Mapped[str | None] = mapped_column(String(256))
 
     account: Mapped[Account] = relationship(back_populates="dm_config", lazy="raise")
 
     @property
     def is_configured(self) -> bool:
         return bool(self.text.strip() or self.photo_path)
+
+    @property
+    def whatsapp_url(self) -> str | None:
+        if not self.whatsapp_phone:
+            return None
+        return whatsapp_url(self.whatsapp_phone, self.whatsapp_message)
+
+    @property
+    def button_text(self) -> str:
+        return self.whatsapp_button_text or DEFAULT_BUTTON_TEXT
 
 
 class DMRepliedUser(Base):

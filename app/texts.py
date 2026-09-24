@@ -292,16 +292,64 @@ BROADCAST_RUNNING = "Bu hesap için zaten bir toplu gönderim çalışıyor."
 DM_SETTINGS = (
     "💬 <b>DM Oto-Cevap Ayarları</b> — {name}\n\n"
     "Durum: {state}\n"
+    "Cevap modu: {mode}\n"
+    "WhatsApp butonu: {whatsapp}\n"
     "Kişilerime de cevap ver: {contacts}\n"
     "Şimdiye kadar cevaplanan: {replied} kişi\n\n"
     "Cevap mesajı:\n{preview}"
 )
+DM_MODE_NAMES = {"first": "🆕 Sadece ilk mesaja", "always": "🔁 Her mesaja"}
+DM_MODE_ALWAYS_DETAIL = " (aynı kişiye en fazla {minutes} dk'da bir)"
 BTN_DM_SET_MESSAGE = "✏️ Cevap Mesajını Ayarla"
 BTN_DM_CONTACTS = "👥 Kişilerime de Cevap Ver: {state}"
+BTN_DM_MODE = "Cevap: {mode}"
+BTN_DM_COOLDOWN = "⏱ Aynı Kişiye Tekrar: {minutes} dk"
+BTN_DM_WHATSAPP = "💚 WhatsApp Butonu: {state}"
+BTN_DM_PREVIEW = "👁 Önizleme"
+DM_MODE_CHANGED = "Cevap modu: {mode}"
 ASK_DM_REPLY = (
-    "✏️ Hesaba <i>ilk kez</i> özelden yazan kişilere gönderilecek mesajı yazın "
+    "✏️ Hesaba özelden yazan kişilere gönderilecek mesajı yazın "
     "(metin veya fotoğraf + metin):\n\n" + CANCEL_HINT
 )
+DM_PREVIEW_HEADER = "👁 <b>Önizleme</b> — özelden yazan kişi bunu görecek:"
+
+WA_MENU = (
+    "💚 <b>WhatsApp Butonu</b> — {name}\n\n"
+    "Oto-cevap mesajının altına, basınca doğrudan WhatsApp sohbetini açan bir buton eklenir.\n\n"
+    "📱 Numara: {phone}\n"
+    "🔤 Buton yazısı: {button}\n"
+    "✉️ Hazır mesaj: {message}\n\n"
+    "{status}"
+)
+WA_STATUS_OK = (
+    "✅ Buton aktif. Telegram'da yalnızca botlar buton gönderebildiği için cevap "
+    "@{bot} üzerinden gönderilir; mesajda küçük bir “via @{bot}” etiketi görünür."
+)
+WA_STATUS_NO_INLINE = (
+    "⚠️ Butonun görünmesi için @BotFather → /setinline → @{bot} ile <b>inline modu açın</b>. "
+    "Kapalıyken WhatsApp linki mesajın sonuna tıklanabilir yazı olarak eklenir."
+)
+WA_STATUS_OFF = "Numara ayarlanınca buton otomatik eklenir."
+BTN_WA_PHONE = "📱 Numarayı Ayarla"
+BTN_WA_BUTTON = "🔤 Buton Yazısı"
+BTN_WA_MESSAGE = "✉️ Hazır Mesaj"
+BTN_WA_REMOVE = "🗑 Butonu Kaldır"
+ASK_WA_PHONE = (
+    "📱 WhatsApp numarasını uluslararası formatta girin (örn: <code>+905551234567</code>):\n\n"
+    + CANCEL_HINT
+)
+ASK_WA_BUTTON = (
+    "🔤 Buton yazısını girin (en fazla {max} karakter).\nVarsayılan: <b>{default}</b>\n\n"
+    + CANCEL_HINT
+)
+ASK_WA_MESSAGE = (
+    "✉️ WhatsApp açıldığında yazma kutusunda hazır duracak mesajı yazın "
+    "(en fazla {max} karakter). Kaldırmak için <code>-</code> gönderin.\n\n" + CANCEL_HINT
+)
+INVALID_WA_BUTTON = "❌ Buton yazısı 1-{max} karakter olmalı."
+INVALID_WA_MESSAGE = "❌ Hazır mesaj en fazla {max} karakter olabilir."
+WA_SAVED = "✅ WhatsApp butonu güncellendi."
+WA_REMOVED = "WhatsApp butonu kaldırıldı."
 DM_REPLY_SAVED = "✅ DM oto-cevap mesajı kaydedildi."
 
 # --------------------------------------------------------------------------- filtreler

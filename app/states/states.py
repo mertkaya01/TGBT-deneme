@@ -25,6 +25,9 @@ class DMStates(StatesGroup):
     broadcast_message = State()
     broadcast_confirm = State()
     reply_message = State()
+    wa_phone = State()
+    wa_button = State()
+    wa_message = State()
 
 
 class FilterStates(StatesGroup):

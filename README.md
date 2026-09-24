@@ -21,7 +21,8 @@ yöneten; otomatik grup mesajı, DM toplu mesaj, DM oto-cevap ve kelime filtrele
 | ↗️ Forward / link | Bot'a kanal postunu forward etmek veya `t.me/kanal/123` linki göndermek yeterli. Başlıklı ya da başlıksız iletilebilir. |
 | 📞 Kişi paylaşma | Otomatik mesajın ardından kişi kartı gönderir. |
 | 💌 DM toplu mesaj | DM listesindeki herkese gönderir (botlar ve silinmiş hesaplar hariç). İlerleme canlı izlenir, istenince durdurulabilir. |
-| 💬 Akıllı DM oto-cevap | Hesaba **ilk kez** yazan kişiye bir kez cevap verir. Sohbet geçmişi olan tanıdıklara yazmaz. |
+| 💬 Akıllı DM oto-cevap | İki mod: **sadece ilk mesaja** (sohbet geçmişi olan tanıdıklara yazmaz) veya **her mesaja** (aynı kişiye ayarlanabilir bekleme süresiyle; hesap o kişiyle yeni yazıştıysa araya girmez). |
+| 💚 WhatsApp butonu | Oto-cevabın altına, basınca doğrudan WhatsApp sohbetini (isteğe bağlı hazır mesajla) açan bir buton ekler. |
 | 🎯 Yanıt filtreleri | Gruplarda kelime yakalanınca mesaja yanıt verir. Türkçe büyük/küçük harf uyumludur (İ/ı). Üç eşleşme tipi ve grup başına bekleme süresi vardır. |
 | 🚫 İstisnalar | Gruplar listeden seçilir veya `@kullanıcı` / link / ID ile eklenir. İstisna gruplara mesaj gitmez, filtreler de çalışmaz. |
 | 📁 Arşiv kontrolü | Arşivlenmiş gruplara gönderim açılıp kapatılabilir. |
@@ -66,7 +67,7 @@ app/
 │   └── errors.py            # Telethon hata sınıflandırması
 └── utils/                   # flood kapısı, Redis kilidi, şifreleme, entity & metin yardımcıları
 migrations/                  # Alembic
-tests/                       # 83 test (uçtan uca bot akışları dahil)
+tests/                       # 89 test (uçtan uca bot akışları dahil)
 ```
 
 ## Kurulum
@@ -75,6 +76,7 @@ tests/                       # 83 test (uçtan uca bot akışları dahil)
 1. [@BotFather](https://t.me/BotFather)'dan bir bot oluşturup **BOT_TOKEN** alın.
 2. [my.telegram.org](https://my.telegram.org) → *API development tools* bölümünden **API_ID** ve **API_HASH** alın.
 3. Kendi Telegram kullanıcı ID'nizi öğrenin (örn. [@userinfobot](https://t.me/userinfobot)); bu değer **ADMIN_IDS** olacak.
+4. *(WhatsApp butonu için)* @BotFather → `/setinline` → botunuzu seçin → bir yer tutucu yazın. Bu adım bota inline modu açar.
 
 > `.env` dosyası gizli bilgiler içerdiği için repoda **bulunmaz**; aşağıdaki adımlarla `.env.example`'dan siz oluşturursunuz.
 
@@ -149,6 +151,18 @@ python -m app                # SQLite + (REDIS_URL boşsa) bellek içi FSM
 
 İşlemleri her adımda `/cancel` ile iptal edebilirsiniz.
 
+### DM oto-cevap ve WhatsApp butonu
+**💬 DM Oto-Cevap Ayarları** menüsünde:
+- **Cevap modu:** *🆕 Sadece ilk mesaja* veya *🔁 Her mesaja*. "Her mesaja" modunda aynı kişiye en fazla
+  *⏱ Aynı Kişiye Tekrar* süresinde bir cevap gider (1 dk – 24 sa). Hesap o kişiyle bu süre içinde
+  (elle veya otomatik) yazıştıysa oto-cevap araya girmez.
+- **💚 WhatsApp Butonu:** numara, buton yazısı ve WhatsApp'ta hazır görünecek mesaj ayarlanır. *👁 Önizleme*
+  ile sonucu görebilirsiniz.
+
+Telegram'da yalnızca botlar buton gönderebilir. Bu yüzden butonlu cevap, userbot hesabı tarafından kontrol
+botunun inline modu kullanılarak gönderilir ve mesajda küçük bir **"via @botunuz"** etiketi görünür. Inline mod
+kapalıysa (BotFather → `/setinline`) buton yerine WhatsApp linki mesajın sonuna tıklanabilir yazı olarak eklenir.
+
 ### Hesap (slot) limiti
 Kullanıcı başına varsayılan limit **500 hesap**tır (`.env` → `MAX_ACCOUNTS_PER_USER`). Değeri değiştirdikten sonra
 `docker compose up -d` çalıştırın; `restart` `.env` değişikliklerini okumaz.
@@ -197,7 +211,7 @@ Aynı hesap iki süreçte çalışmasın diye Redis kilidi (`SET NX PX` + heartb
 ## Geliştirme
 
 ```bash
-pytest                   # 83 test (SQLite)
+pytest                   # 89 test (SQLite)
 TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost/tgbt pytest   # PostgreSQL ile
 ruff check . && ruff format --check .
 alembic revision --autogenerate -m "açıklama"   # model değişikliğinden sonra

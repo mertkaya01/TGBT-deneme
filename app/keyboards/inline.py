@@ -18,6 +18,7 @@ from app.database.models import (
     AccountStatus,
     AutoMessageConfig,
     DMAutoReplyConfig,
+    DMReplyMode,
     ReplyFilter,
 )
 from app.keyboards.callbacks import (
@@ -337,11 +338,47 @@ def dm_settings(account: Account, dm: DMAutoReplyConfig) -> InlineKeyboardMarkup
     )
     builder.button(text=texts.BTN_DM_SET_MESSAGE, callback_data=DmCB(action="set", aid=aid))
     builder.button(
+        text=texts.BTN_DM_MODE.format(mode=texts.DM_MODE_NAMES[dm.reply_mode]),
+        callback_data=DmCB(action="mode", aid=aid),
+    )
+    if dm.reply_mode == DMReplyMode.ALWAYS:
+        builder.button(
+            text=texts.BTN_DM_COOLDOWN.format(minutes=dm.repeat_cooldown_min),
+            callback_data=DmCB(action="cooldown", aid=aid),
+        )
+    builder.button(
+        text=texts.BTN_DM_WHATSAPP.format(state=texts.on_off(dm.whatsapp_url is not None)),
+        callback_data=DmCB(action="wa", aid=aid),
+    )
+    builder.button(
         text=texts.BTN_DM_CONTACTS.format(state=texts.on_off(not dm.skip_contacts)),
         callback_data=DmCB(action="contacts", aid=aid),
     )
+    if dm.is_configured:
+        builder.button(text=texts.BTN_DM_PREVIEW, callback_data=DmCB(action="preview", aid=aid))
     builder.button(text=texts.BTN_BACK, callback_data=AccountCB(action="open", aid=aid))
     return _single_column(builder)
+
+
+def whatsapp_menu(aid: int, dm: DMAutoReplyConfig) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=texts.BTN_WA_PHONE, callback_data=DmCB(action="wa_phone", aid=aid))
+    if dm.whatsapp_phone:
+        builder.button(text=texts.BTN_WA_BUTTON, callback_data=DmCB(action="wa_btn", aid=aid))
+        builder.button(text=texts.BTN_WA_MESSAGE, callback_data=DmCB(action="wa_msg", aid=aid))
+        builder.button(text=texts.BTN_WA_REMOVE, callback_data=DmCB(action="wa_rm", aid=aid))
+    builder.button(text=texts.BTN_BACK, callback_data=AccountCB(action="dm_cfg", aid=aid))
+    return _single_column(builder)
+
+
+def whatsapp_button(dm: DMAutoReplyConfig) -> InlineKeyboardMarkup | None:
+    """Oto-cevabın altındaki URL butonu (bot tarafından gönderilir)."""
+    url = dm.whatsapp_url
+    if url is None:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=dm.button_text, url=url)]]
+    )
 
 
 # --------------------------------------------------------------------------- filtreler
